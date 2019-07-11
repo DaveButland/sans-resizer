@@ -1,5 +1,7 @@
 const AWS = require('aws-sdk') ;
+const util = require( 'util' ) ;
 const sharp = require('sharp') ;
+
 const config = require('./config') ;
 const response = require('./response') ;
 const persist  = require('./persist');
@@ -157,10 +159,70 @@ exports.resize = (event, context, callback) => {
 		}) ;	
 	})
 	.catch(function(err) {
-		console.log( "Error getting image - ", err, err.stack );
+		console.log( "Error getting image record - ", err, err.stack );
 		callback( null, response.failure({ status: false }) );
 	});
 }
+
+exports.resizeTest = (event) => {
+
+	console.log("Reading options from event:\n", util.inspect(event, {depth: 5}));
+	var bucket   = event.Records[0].s3.bucket.name;
+	var key      = decodeURIComponent(event.Records[0].s3.object.key.replace(/\+/g, " "));  
+	var thumbkey = key + '-300' ;
+
+	path = key.split( "/" ) ;
+
+	console.log( path ) ;
+	console.log( bucket, key ) ;
+
+}
+
+exports.resizeImage = (event) => {
+
+	// need to put some validation on this. 
+	console.log("Reading options from event:\n", util.inspect(event, {depth: 5}));
+	var bucket   = event.Records[0].s3.bucket.name;
+	var key      = decodeURIComponent(event.Records[0].s3.object.key.replace(/\+/g, " "));  
+	var path = key.split( "/" ) ;
+	var thumbkey = 'thumbnail/' + path[1] + '/' + path[2] + '-300' ;
+
+	console.log( bucket, key ) ;
+
+	var s3GetParams = {  Bucket: bucket, Key: key } ;
+	
+	console.log( JSON.stringify( s3GetParams ) ) ;
+	
+	s3.getObject( s3GetParams, function(err, data) {
+		if (err) { 
+			console.log( "Error reading image - ", err, err.stack );
+			return response.failure({ message: 'Failed to read image' }) ; 
+		} 
+		else {
+			const { Body, ContentType } = data
+			const imageData = new Buffer.from(Body)
+			const tasks = { width: 300 } ;
+	
+			sharp(imageData).resize(tasks).toBuffer().then(function(newFileInfo) {
+				var s3PutParams = {  Bucket: bucket, Key: thumbkey, ContentType, Body: newFileInfo } ;
+	
+				s3.putObject( s3PutParams, function( err, data) 
+				{
+					if (err) { 
+						console.log( "Error writing image - ", err, err.stack );
+						return response.failure({ message: 'Failed to write image' }) ;
+						} 
+					else {
+						return response.success({ message: 'Created Thumbnails' }) ;
+					}
+				}) ;
+			}).catch(function(err) {
+				console.log( "Error resizeing image - ", err, err.stack );
+				return response.failure({ message: 'Failed to resize image' }) ;
+			});
+		}
+	}) ;
+};
 
 exports.resizeFolder = (event, context, callback) => {
 
