@@ -237,11 +237,14 @@ exports.resizeFolder = (event, context, callback) => {
 		return false ;
 	}
 	
+	const quyen = '832bb986-871d-4bd2-a832-9e7134265604' ; // temp for now
+
 	const folderId = event.pathParameters.folderid ;
+	const width    = parseInt( event.queryStringParameters.width ) || 300 ;
 	const table = 'sans-images' ;
 	const index = 'userid-folderid-index' ;
 	const expression = "userId = :u and folderId = :f" ;
-	const values = {":u": sub, ":f": folderId } ;
+	const values = {":u": quyen, ":f": folderId } ;
 
 	console.log( "Resizing folder ", values ) ;
 
@@ -252,11 +255,11 @@ exports.resizeFolder = (event, context, callback) => {
 
 			console.log( "Resizing image ", image.imageId ) ;
 
-			image.thumbnail = image.imageId + '-300' ;
+			image.thumbnail = image.imageId + '-' + width ;
 
 			var bucket   = "private.sans-website.com"
 			var key      = "private/" + image.folderId + "/" + image.imageId ;
-			var thumbkey = "private/" + image.folderId + "/" + image.thumbnail ;
+			var thumbkey = "thumbnail/" + image.folderId + "/" + image.thumbnail ;
 
 			console.log( JSON.stringify( image ) ) ;
 	
@@ -270,7 +273,7 @@ exports.resizeFolder = (event, context, callback) => {
 				} else {
 					const { Body, ContentType } = data
 					const imageData = new Buffer.from(Body)
-					const tasks = { width: 300 } ;
+					const tasks = { width: width } ;
 	
 					sharp(imageData).resize(tasks).toBuffer().then(function(newFileInfo) {
 						var s3PutParams = {  Bucket: bucket, Key: thumbkey, ContentType, Body: newFileInfo } ;
@@ -279,12 +282,8 @@ exports.resizeFolder = (event, context, callback) => {
 							if (err) { 
 								console.log( "Error writing image - ", err, err.stack );
 							} else {
-								persist.put( table, image ).then( function( data ) {
-									console.log( "Resized image " + image.imageId ) ;
-								}).catch ( function( err ) {
-									console.log( "Error updating table image - ", err, err.stack );
-								}) ;
-							}
+								console.log( "Resized image " + image.imageId ) ;
+							} 
 						}) ;
 					})
 					.catch(function(err) {
