@@ -13,6 +13,7 @@ AWS.config.update({
 
 const s3 = new AWS.S3({signatureVersion: 'v4', signatureCache: false, accessKeyId: config.keys.accessKeyId, secretAccessKey: config.keys.secretAccessKey});
 
+/*
 createImageThumbnail = ( bucket, folder, image, width ) => {
 
   return new Promise((resolve, reject) => {
@@ -81,7 +82,7 @@ createFolderThumbnails = async( user, folder ) => {
 		
 		var images = data.Items ;
 		images.map ( image => {
-			await createImageThumbnails( bucket, folder, image ) ;
+			createImageThumbnails( bucket, folder, image ) ;
 		}) ;
 		
 	}).catch ( function( err ) {
@@ -124,7 +125,7 @@ exports.createFolderThumbnailsTrigger = async (event, context, callback) => {
 	await this.createFolderThumbnails( sub, folderId ) ;
 
 	console.log( "createFolderThumbnailsTrigger exit" ) ;
-}}
+}
 
 exports.resizeImage = (event) => {
 
@@ -246,4 +247,97 @@ exports.resizeFolder = (event, context, callback) => {
 
 	callback( null, response.success( "Finished") ) ;
 }
+*/
+
+//New code from here
+
+exports.createImageThumbnail = async ( bucket, folder, image, width ) => {
+	const inputKey = 'private/'+folder+'/'+image ;
+	const outputKey = 'thumbnail/'+folder+'/'+image+'-'+width ;
+	const s3GetParams = {  Bucket: bucket, Key: inputKey } ;
+
+	try {
+		const inputImage = await s3.getObject( s3GetParams ).promise() ;
+		const { Body, ContentType } = inputImage ;
+		const imageData = new Buffer.from(Body)
+		const tasks = { width: width } ;
+
+		try {
+			await sharp(imageData).resize(tasks).toBuffer().then( async function(newFileInfo) {
+			
+				const s3PutParams = {  Bucket: bucket, Key: outputKey, ContentType, Body: newFileInfo } ;
+
+				try {
+					const outputImage = await s3.putObject( s3PutParams ).promise() ; 
+					console.log( "resized " + image + " " + width ) ;
+					return outputImage ;
+				} catch ( error ) {
+					console.log( error ) ;
+					return error ;
+				} 
+			}) ;
+		} catch( error ) {
+			console.log( error ) ;
+			return error ;
+		}
+	} catch( error ) {
+		console.log( error ) ;
+		return error ;
+	}
+}
+
+exports.createImageThumbnails = async ( bucket, folder, image ) => {
+	const sizes  = [300,600,900,1200,1500,1800] ;
+
+	try {
+
+		const images = Promise.all( 
+			sizes.map( async ( size ) => {
+				return this.createImageThumbnail( bucket, folder, image, size ) ;
+			})
+		) ;
+
+		return await images ;
+	} catch ( error ) {
+		console.log( error ) ;
+		return error ;
+	}
+}
+
+exports.createFolderThumbnails = async ( bucket, folder, image ) => {
+	const sizes  = [300,600,900,1200,1500,1800] ;
+
+	try {
+
+		const images = Promise.all( 
+			sizes.map( async ( size ) => {
+				return this.createImageThumbnail( bucket, folder, image, size ) ;
+			})
+		) ;
+
+		return await images ;
+	} catch ( error ) {
+		console.log( error ) ;
+		return error ;
+	}
+}
+
+exports.triggerCreateImageThumbnails = async (event) => {
+  console.log('Received event:', JSON.stringify(event, null, 2));
+
+	const bucket = event.Records[0].s3.bucket.name;
+	const key    = decodeURIComponent(event.Records[0].s3.object.key.replace(/\+/g, " "));
+	const path   = key.split( "/" ) ;
+	const folder = path[1] ;
+	const image  = path[2] ;	
+	
+	try {
+		const images = await this.createImageThumbnails( bucket, folder, image ) ;
+		console.log( "Finsihed" ) ;
+		return true ;
+	} catch ( error ) {
+		console.log( error ) ;
+		return false ;
+	}
+};
 

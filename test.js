@@ -22,5 +22,7 @@ const event = {
   }] 
 }
 
-index.createThumbnails( event ) ;
+//index.createThumbnails( event ) ;
+
+index.createFolderThumbnails( null, "1dff7707-bb12-4666-acbb-dac837e768d7" ) ;
 
